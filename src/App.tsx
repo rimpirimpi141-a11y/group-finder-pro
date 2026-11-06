@@ -15,7 +15,6 @@ import {
   UserCheck,
   RefreshCw,
   Code2,
-  FileCode,
   Play,
   ExternalLink,
   Trash2,
@@ -27,6 +26,14 @@ import {
   PACKAGE_JSON_SNIPPET,
   DEPLOYMENT_STEPS,
 } from "./data/workerSource";
+import {
+  SEEDED_BULK_GCS,
+  DEFAULT_CATEGORIES,
+  ADMIN_ID,
+  deduplicateGcsByLink,
+  normalizeTelegramLink,
+  type GroupChatItem,
+} from "./index";
 
 // ============================================================================
 // SIMULATED CLOUDFLARE KV TYPES & INITIAL SEED DATA
@@ -47,19 +54,6 @@ interface SimUser {
     link?: string;
     targetGcId?: string;
   };
-}
-
-interface SimGC {
-  id: string;
-  title: string;
-  category: string;
-  link: string;
-  note: string;
-  submittedBy: number;
-  submitterUsername: string;
-  status: "pending" | "approved" | "rejected";
-  isSponsored?: boolean;
-  createdAt: string;
 }
 
 interface SimForceChannel {
@@ -94,81 +88,9 @@ interface ChatMessage {
   keyboard?: InlineBtn[][];
 }
 
-const ADMIN_ID = 8838351233;
 const STD_USER_ID = 551920411;
 
-const INITIAL_CATEGORIES = [
-  "Earning Discussion",
-  "Promotion Zone",
-  "Chatting & Friends",
-  "Escrow GC",
-  "Gaming / Tech",
-];
-
-const INITIAL_GCS: SimGC[] = [
-  {
-    id: "GC-901A",
-    title: "Web3 Alpha & Airdrops Hub",
-    category: "Earning Discussion",
-    link: "https://t.me/aaditya334356",
-    note: "Daily verified crypto airdrops, alpha calls & zero-investment earning strategies.",
-    submittedBy: ADMIN_ID,
-    submitterUsername: "@aaditya334356",
-    status: "approved",
-    isSponsored: true,
-    createdAt: "2026-11-01",
-  },
-  {
-    id: "GC-902B",
-    title: "Global Telegram Ad Exchange",
-    category: "Promotion Zone",
-    link: "https://t.me/aaditya334356",
-    note: "Cross-promote your channels and groups with 50k+ active community owners.",
-    submittedBy: ADMIN_ID,
-    submitterUsername: "@aaditya334356",
-    status: "approved",
-    isSponsored: true,
-    createdAt: "2026-11-02",
-  },
-  {
-    id: "GC-903C",
-    title: "Midnight Builders & Chill Lounge",
-    category: "Chatting & Friends",
-    link: "https://t.me/aaditya334356",
-    note: "24/7 voice chats, global friendships, music bots, and active moderators.",
-    submittedBy: STD_USER_ID,
-    submitterUsername: "@rohan_crypto",
-    status: "approved",
-    isSponsored: false,
-    createdAt: "2026-11-03",
-  },
-  {
-    id: "GC-904D",
-    title: "Verified OTC & Middleman Desk",
-    category: "Escrow GC",
-    link: "https://t.me/aaditya334356",
-    note: "Trusted P2P escrow deals with verified bond protection and reputation logs.",
-    submittedBy: ADMIN_ID,
-    submitterUsername: "@aaditya334356",
-    status: "approved",
-    isSponsored: true,
-    createdAt: "2026-11-04",
-  },
-  {
-    id: "GC-905E",
-    title: "Cloudflare Workers & Full-Stack Devs",
-    category: "Gaming / Tech",
-    link: "https://t.me/aaditya334356",
-    note: "TypeScript, grammY bots, serverless edge architecture, and PC gaming nights.",
-    submittedBy: ADMIN_ID,
-    submitterUsername: "@aaditya334356",
-    status: "approved",
-    isSponsored: false,
-    createdAt: "2026-11-04",
-  },
-];
-
-const INITIAL_PENDING_GCS: SimGC[] = [
+const INITIAL_PENDING_GCS: GroupChatItem[] = [
   {
     id: "GC-998P",
     title: "Indie SaaS Founders Network",
@@ -188,7 +110,7 @@ export default function App() {
   const [selectedFile, setSelectedFile] = useState<"index.ts" | "wrangler.toml" | "package.json">("index.ts");
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  // Simulated Cloudflare KV State
+  // Simulated Cloudflare KV State (Initialized with the 29 Deduplicated Bulk GCs)
   const [config, setConfig] = useState<SimConfig>({
     maintenanceMode: false,
     requiredReferrals: 3,
@@ -201,9 +123,9 @@ export default function App() {
     sponsoredBannerUrl: "https://t.me/aaditya334356",
   });
 
-  const [categories, setCategories] = useState<string[]>(INITIAL_CATEGORIES);
-  const [approvedGcs, setApprovedGcs] = useState<SimGC[]>(INITIAL_GCS);
-  const [pendingGcs, setPendingGcs] = useState<SimGC[]>(INITIAL_PENDING_GCS);
+  const [categories, setCategories] = useState<string[]>(DEFAULT_CATEGORIES);
+  const [approvedGcs, setApprovedGcs] = useState<GroupChatItem[]>(SEEDED_BULK_GCS);
+  const [pendingGcs, setPendingGcs] = useState<GroupChatItem[]>(INITIAL_PENDING_GCS);
   const [forceChannels, setForceChannels] = useState<SimForceChannel[]>([]);
   const [reports, setReports] = useState<string[]>([
     "[2026-11-05T03:15:00Z] From 551920411 (@rohan_crypto): GC-404X invite link expired",
@@ -217,7 +139,7 @@ export default function App() {
       joinedAt: "2026-10-15",
       referredBy: null,
       referrals: [551920411, 771829100, 991827364],
-      submittedGcIds: ["GC-901A", "GC-902B", "GC-904D", "GC-905E"],
+      submittedGcIds: SEEDED_BULK_GCS.map((g) => g.id),
       step: "IDLE",
       draft: {},
     },
@@ -227,8 +149,8 @@ export default function App() {
       firstName: "Rohan Sharma",
       joinedAt: "2026-11-02",
       referredBy: ADMIN_ID,
-      referrals: [800100201], // Starts with 1/3 referrals so user can test unlocking!
-      submittedGcIds: ["GC-903C", "GC-998P"],
+      referrals: [800100201],
+      submittedGcIds: ["GC-998P"],
       step: "IDLE",
       draft: {},
     },
@@ -249,9 +171,10 @@ export default function App() {
     setTimeout(() => setToastAlert(null), 3200);
   };
 
-  // Build menus matching the exact worker code
-  const getMainMenuKeyboard = (uid: number, unlocked: boolean): InlineBtn[][] => {
+  // Build menus matching the exact worker code (with "🌐 All GC" at top)
+  const getMainMenuKeyboard = (uid: number, unlocked: boolean, gcTotal: number): InlineBtn[][] => {
     const rows: InlineBtn[][] = [
+      [{ text: `🌐 All GC (${gcTotal})`, callbackData: "menu:all_gcs:0" }],
       [
         { text: "📂 Browse Categories", callbackData: "menu:categories" },
         {
@@ -324,7 +247,7 @@ export default function App() {
       `📢 Sponsored: ${cfg.sponsoredBannerText}\n` +
       `━━━━━━━━━━━━━━━━━━━━━━\n` +
       `👨‍💻 Developer: @aaditya334356\n` +
-      `👇 Choose an option from the interactive menu below:`
+      `👇 Tap "🌐 All GC (${gcCount})" or choose a category below:`
     );
   };
 
@@ -336,7 +259,7 @@ export default function App() {
       joinedAt: "2026-10-15",
       referredBy: null,
       referrals: [551920411, 771829100, 991827364],
-      submittedGcIds: ["GC-901A", "GC-902B", "GC-904D", "GC-905E"],
+      submittedGcIds: SEEDED_BULK_GCS.map((g) => g.id),
       step: "IDLE",
       draft: {},
     };
@@ -364,10 +287,11 @@ export default function App() {
               "🔥 Promote your Group or Channel here! Contact @aaditya334356 for pinned Sponsored slots.",
             sponsoredBannerUrl: "https://t.me/aaditya334356",
           },
-          INITIAL_GCS.length
+          SEEDED_BULK_GCS.length
         ),
         timestamp: "04:45",
         keyboard: [
+          [{ text: `🌐 All GC (${SEEDED_BULK_GCS.length})`, callbackData: "menu:all_gcs:0" }],
           [
             { text: "📂 Browse Categories", callbackData: "menu:categories" },
             { text: "🌟 Sponsored / Top GCs", callbackData: "menu:sponsored" },
@@ -490,7 +414,7 @@ export default function App() {
                 isBanner: true,
                 loadingProgress: undefined,
                 text: buildWelcomeText(u, config, approvedGcs.length),
-                keyboard: getMainMenuKeyboard(u.id, unlocked),
+                keyboard: getMainMenuKeyboard(u.id, unlocked, approvedGcs.length),
               }
             : m
         )
@@ -545,6 +469,8 @@ export default function App() {
 
   // Handle Inline Keyboard Button Clicks inside Simulator
   const handleCallbackClick = (cbData: string) => {
+    if (cbData === "noop") return;
+
     // Maintenance Check
     if (config.maintenanceMode && activeUserId !== ADMIN_ID) {
       showToast("🛠️ Maintenance Mode Active! Non-admin users are currently blocked.");
@@ -578,7 +504,7 @@ export default function App() {
       showToast("✅ Force subscription verified!");
       updateLastBotMessage(
         buildWelcomeText(currentUser, config, approvedGcs.length),
-        getMainMenuKeyboard(activeUserId, unlocked),
+        getMainMenuKeyboard(activeUserId, unlocked, approvedGcs.length),
         true
       );
       return;
@@ -591,14 +517,61 @@ export default function App() {
       }));
       updateLastBotMessage(
         buildWelcomeText(currentUser, config, approvedGcs.length),
-        getMainMenuKeyboard(activeUserId, unlocked),
+        getMainMenuKeyboard(activeUserId, unlocked, approvedGcs.length),
         true
       );
       return;
     }
 
-    if (cbData === "menu:categories") {
+    // "🌐 All GC" Paginated View
+    if (cbData.startsWith("menu:all_gcs:")) {
+      const page = parseInt(cbData.split(":")[2], 10) || 0;
+      const pageSize = 10;
+      const totalPages = Math.max(1, Math.ceil(approvedGcs.length / pageSize));
+      const safePage = Math.min(Math.max(0, page), totalPages - 1);
+      const slice = approvedGcs.slice(safePage * pageSize, (safePage + 1) * pageSize);
+
+      let text =
+        `🌐 All Verified Group Chats (${approvedGcs.length} Total)\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `📄 Showing Page ${safePage + 1} of ${totalPages} (Deduplicated & Verified):\n\n`;
+
       const kb: InlineBtn[][] = [];
+      let row: InlineBtn[] = [];
+
+      slice.forEach((gc, idx) => {
+        const num = safePage * pageSize + idx + 1;
+        text += `${num}. ${gc.title} ${gc.isSponsored ? "🌟" : ""}\n├ 📂 ${gc.category}\n└ 🔗 ${gc.link}\n\n`;
+        row.push({ text: `🚀 ${num}. ${gc.title}`, url: gc.link });
+        if (row.length === 2) {
+          kb.push(row);
+          row = [];
+        }
+      });
+      if (row.length > 0) kb.push(row);
+
+      if (totalPages > 1) {
+        const navRow: InlineBtn[] = [];
+        if (safePage > 0) navRow.push({ text: "⬅️ Prev", callbackData: `menu:all_gcs:${safePage - 1}` });
+        navRow.push({ text: `📄 ${safePage + 1}/${totalPages}`, callbackData: "noop" });
+        if (safePage + 1 < totalPages)
+          navRow.push({ text: "Next ➡️", callbackData: `menu:all_gcs:${safePage + 1}` });
+        kb.push(navRow);
+      }
+
+      kb.push([
+        { text: "📂 By Category", callbackData: "menu:categories" },
+        { text: "🔙 Main Menu", callbackData: "menu:home" },
+      ]);
+
+      updateLastBotMessage(text, kb, false);
+      return;
+    }
+
+    if (cbData === "menu:categories") {
+      const kb: InlineBtn[][] = [
+        [{ text: `🌐 All GC (${approvedGcs.length})`, callbackData: "menu:all_gcs:0" }],
+      ];
       let row: InlineBtn[] = [];
       categories.forEach((cat, idx) => {
         const count = approvedGcs.filter((g) => g.category === cat).length;
@@ -612,7 +585,7 @@ export default function App() {
       kb.push([{ text: "🔙 Back to Main Menu", callbackData: "menu:home" }]);
 
       updateLastBotMessage(
-        `📂 Browse Verified Categories\n━━━━━━━━━━━━━━━━━━━━━━\nSelect a category below to explore active Telegram Groups & Communities:`,
+        `📂 Browse Verified Categories\n━━━━━━━━━━━━━━━━━━━━━━\nTap 🌐 All GC (${approvedGcs.length}) to view the full master list or select a category below:`,
         kb,
         false
       );
@@ -620,27 +593,42 @@ export default function App() {
     }
 
     if (cbData.startsWith("cat:view:")) {
-      const [, , catIdxStr] = cbData.split(":");
+      const [, , catIdxStr, pageStr] = cbData.split(":");
       const catIdx = parseInt(catIdxStr, 10);
+      const page = parseInt(pageStr, 10) || 0;
       const catName = categories[catIdx] || categories[0];
       const items = approvedGcs.filter((g) => g.category === catName);
+      const pageSize = 6;
+      const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
+      const slice = items.slice(page * pageSize, (page + 1) * pageSize);
 
-      let text = `📂 Category: ${catName}\n━━━━━━━━━━━━━━━━━━━━━━\n`;
+      let text = `📂 Category: ${catName} (${items.length})\n━━━━━━━━━━━━━━━━━━━━━━\n`;
       const kb: InlineBtn[][] = [];
 
-      if (items.length === 0) {
+      if (slice.length === 0) {
         text += `No groups have been approved in this category yet. Be the first to submit one!`;
         kb.push([{ text: "➕ Submit GC Here", callbackData: `submit:pick:${catIdx}` }]);
       } else {
-        items.forEach((gc, i) => {
-          text += `${i + 1}. ${gc.title} ${gc.isSponsored ? "🌟" : ""}\n├ 📝 ${gc.note}\n└ 🆔 Code: ${gc.id}\n\n`;
+        slice.forEach((gc, i) => {
+          const num = page * pageSize + i + 1;
+          text += `${num}. ${gc.title} ${gc.isSponsored ? "🌟" : ""}\n├ 📝 ${gc.note}\n└ 🆔 Code: ${gc.id}\n\n`;
           kb.push([{ text: `🚀 Join: ${gc.title}`, url: gc.link }]);
         });
+
+        if (totalPages > 1) {
+          const navRow: InlineBtn[] = [];
+          if (page > 0) navRow.push({ text: "⬅️ Prev", callbackData: `cat:view:${catIdx}:${page - 1}` });
+          navRow.push({ text: `📄 ${page + 1}/${totalPages}`, callbackData: "noop" });
+          if (page + 1 < totalPages)
+            navRow.push({ text: "Next ➡️", callbackData: `cat:view:${catIdx}:${page + 1}` });
+          kb.push(navRow);
+        }
       }
       kb.push([
-        { text: "🔙 Back to Categories", callbackData: "menu:categories" },
-        { text: "🏠 Home", callbackData: "menu:home" },
+        { text: "🌐 All GC", callbackData: "menu:all_gcs:0" },
+        { text: "🔙 Categories", callbackData: "menu:categories" },
       ]);
+      kb.push([{ text: "🏠 Back to Main Menu", callbackData: "menu:home" }]);
       updateLastBotMessage(text, kb, false);
       return;
     }
@@ -735,7 +723,7 @@ export default function App() {
         `📂 My Submitted Group Chats\n━━━━━━━━━━━━━━━━━━━━━━\n` +
         `✅ Approved: ${myApproved.length} | ⏳ Pending: ${myPending.length}\n\n`;
 
-      myApproved.forEach((g) => {
+      myApproved.slice(0, 8).forEach((g) => {
         text += `🟢 ${g.title} (${g.category})\n└ 🔗 ${g.link}\n\n`;
       });
       myPending.forEach((g) => {
@@ -776,7 +764,7 @@ export default function App() {
         [activeUserId]: { ...prev[activeUserId], step: "SEARCH_GC_QUERY" },
       }));
       updateLastBotMessage(
-        `🔍 Quick Search Directory\n━━━━━━━━━━━━━━━━━━━━━━\nSend any keyword, topic, or category name in the message bar below to search across all verified Group Chats:`,
+        `🔍 Quick Search Directory\n━━━━━━━━━━━━━━━━━━━━━━\nSend any keyword, topic, or category name in the message bar below to search across all ${approvedGcs.length} verified Group Chats:`,
         [[{ text: "🔙 Back to Main Menu", callbackData: "menu:home" }]],
         false
       );
@@ -799,16 +787,19 @@ export default function App() {
     if (cbData === "menu:how_it_works") {
       updateLastBotMessage(
         `❓ How 𝕲𝖗𝖔𝖚𝖕 𝕱𝖎𝖓𝖉𝖊𝖗 𝕻𝖗𝖔 Works\n━━━━━━━━━━━━━━━━━━━━━━\n` +
-          `1️⃣ Browse Categories: Explore curated Telegram groups across Earning, Promotion, Chatting, Escrow, and Gaming/Tech.\n\n` +
-          `2️⃣ Submit Your GC: List your own Telegram group with a custom note. Every submission is verified by our Admin team.\n\n` +
+          `1️⃣ All GC & Categories: Browse all ${approvedGcs.length} verified Telegram groups under 🌐 All GC or filter by Earning, Promotion, Chatting, Escrow, and Gaming/Tech.\n\n` +
+          `2️⃣ Submit Your GC: List your own Telegram group with automatic duplicate-link detection. Every submission is verified by our Admin team.\n\n` +
           `3️⃣ Refer & Unlock: Invite ${config.requiredReferrals} friends using your unique referral link to unlock 🌟 Sponsored / Top GCs and increase your submission limit from ${config.baseGcLimit} to ${config.unlockedGcLimit} GCs!\n\n` +
           `👨‍💻 Owner & Support: @aaditya334356`,
         [
           [
-            { text: "📂 Explore Categories", callbackData: "menu:categories" },
-            { text: "➕ Submit GC", callbackData: "menu:submit_gc" },
+            { text: `🌐 All GC (${approvedGcs.length})`, callbackData: "menu:all_gcs:0" },
+            { text: "📂 Categories", callbackData: "menu:categories" },
           ],
-          [{ text: "🔙 Back to Main Menu", callbackData: "menu:home" }],
+          [
+            { text: "➕ Submit GC", callbackData: "menu:submit_gc" },
+            { text: "🔙 Main Menu", callbackData: "menu:home" },
+          ],
         ],
         false
       );
@@ -905,8 +896,8 @@ export default function App() {
           text += `\n`;
         }
 
-        text += `📂 Approved GCs (${approvedGcs.length}):\n`;
-        approvedGcs.forEach((gc) => {
+        text += `📂 Recent Approved GCs (${approvedGcs.length} total):\n`;
+        approvedGcs.slice(0, 8).forEach((gc) => {
           text += `• ${gc.title} [${gc.id}]\n`;
           kb.push([{ text: `🗑️ Delete GC: ${gc.title}`, callbackData: `admin:del_gc:${gc.id}` }]);
         });
@@ -977,9 +968,9 @@ export default function App() {
         const target = pendingGcs.find((g) => g.id === gcId);
         if (!target) return;
 
-        const approvedItem: SimGC = { ...target, status: "approved", isSponsored };
+        const approvedItem: GroupChatItem = { ...target, status: "approved", isSponsored };
         setPendingGcs((prev) => prev.filter((g) => g.id !== gcId));
-        setApprovedGcs((prev) => [approvedItem, ...prev]);
+        setApprovedGcs((prev) => deduplicateGcsByLink([approvedItem, ...prev]));
         showToast(`✅ Approved "${target.title}" and published to BOT_KV!`);
 
         updateLastBotMessage(
@@ -1183,7 +1174,7 @@ export default function App() {
 
     const step = currentUser.step;
 
-    // Step 1 -> 2 -> 3 GC Submission
+    // Step 1 -> 2 -> 3 GC Submission with Duplicate Detection
     if (step === "SUBMIT_GC_TITLE") {
       setUsers((prev) => ({
         ...prev,
@@ -1207,6 +1198,20 @@ export default function App() {
         ]);
         return;
       }
+
+      const candidateKey = normalizeTelegramLink(text);
+      const isDuplicate = [...approvedGcs, ...pendingGcs].some(
+        (g) => normalizeTelegramLink(g.link) === candidateKey
+      );
+      if (isDuplicate) {
+        showToast("⚠️ Duplicate link detected and blocked!");
+        replyBot(
+          "⚠️ Duplicate Group Detected!\nThis Telegram group link is already listed in our directory or awaiting review. Please send a different group link:",
+          [[{ text: "🔙 Cancel", callbackData: "menu:home" }]]
+        );
+        return;
+      }
+
       setUsers((prev) => ({
         ...prev,
         [activeUserId]: {
@@ -1216,14 +1221,14 @@ export default function App() {
         },
       }));
       replyBot(
-        `🔗 Link Saved!\n\nStep 3b of 3: Finally, send a short Note / Description describing your group:`,
+        `🔗 Link Verified (No Duplicates)!\n\nStep 3b of 3: Finally, send a short Note / Description describing your group:`,
         [[{ text: "🔙 Cancel", callbackData: "menu:home" }]]
       );
       return;
     }
 
     if (step === "SUBMIT_GC_NOTE") {
-      const newGc: SimGC = {
+      const newGc: GroupChatItem = {
         id: `GC-${Math.floor(100 + Math.random() * 899)}N`,
         title: currentUser.draft.title || "Untitled Group",
         category: currentUser.draft.category || categories[0],
@@ -1268,7 +1273,8 @@ export default function App() {
         (g) =>
           g.title.toLowerCase().includes(q) ||
           g.category.toLowerCase().includes(q) ||
-          g.note.toLowerCase().includes(q)
+          g.note.toLowerCase().includes(q) ||
+          g.link.toLowerCase().includes(q)
       );
 
       let resText = `🔍 Search Results for "${text}" (${matches.length})\n━━━━━━━━━━━━━━━━━━━━━━\n`;
@@ -1276,12 +1282,15 @@ export default function App() {
       if (matches.length === 0) {
         resText += `No matching groups found. Try another keyword!`;
       } else {
-        matches.forEach((g, i) => {
+        matches.slice(0, 8).forEach((g, i) => {
           resText += `${i + 1}. ${g.title} [${g.category}]\n└ 📝 ${g.note}\n\n`;
           kb.push([{ text: `🚀 Join ${g.title}`, url: g.link }]);
         });
       }
-      kb.push([{ text: "🔙 Back to Main Menu", callbackData: "menu:home" }]);
+      kb.push([
+        { text: "🌐 All GC", callbackData: "menu:all_gcs:0" },
+        { text: "🔙 Main Menu", callbackData: "menu:home" },
+      ]);
       replyBot(resText, kb);
       return;
     }
@@ -1399,7 +1408,7 @@ export default function App() {
     const unlocked = currentUser.referrals.length >= config.requiredReferrals;
     replyBot(
       buildWelcomeText(currentUser, config, approvedGcs.length),
-      getMainMenuKeyboard(activeUserId, unlocked)
+      getMainMenuKeyboard(activeUserId, unlocked, approvedGcs.length)
     );
   };
 
@@ -1497,24 +1506,23 @@ export default function App() {
         <section className="border border-slate-800 bg-slate-900/50 rounded-xl p-6 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
           <div className="space-y-2 max-w-3xl">
             <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400 font-mono">
-              <span>grammY v1.35 Webhook Engine</span>
+              <span>has_modules: true (ES Worker)</span>
               <span aria-hidden="true">·</span>
-              <span>Cloudflare Workers KV (BOT_KV)</span>
+              <span>{approvedGcs.length} Verified GCs in All GC</span>
               <span aria-hidden="true">·</span>
               <span>Owner: @aaditya334356</span>
               <span aria-hidden="true">·</span>
               <span>Admin ID: 8838351233</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight font-display">
-              𝕲𝖗𝖔𝖚𝖕 𝕱𝖎𝖓𝖉𝖊𝖗 𝕻𝖗𝖔 — Production Cloudflare Worker & Bot Sandbox
+              𝕲𝖗𝖔𝖚𝖕 𝕱𝖎𝖓𝖉𝖊𝖗 𝕻𝖗𝖔 — Pure Cloudflare Worker Module & All GC Directory
             </h1>
             <p className="text-sm text-slate-300 leading-relaxed">
-              Complete serverless Telegram bot built on the{" "}
-              <code className="text-sky-300 font-mono">grammY</code> framework for Cloudflare Workers.
-              Includes the 4-step dynamic <code className="text-sky-300 font-mono">/start</code> loading
-              animation, multi-category GC directory, 3-referral VIP unlock gate, force-subscription
-              verifier, and a color-coded Admin Control Panel locked to ID{" "}
-              <code className="text-emerald-400 font-mono">8838351233</code>.
+              Updated with all <strong className="text-white">{approvedGcs.length} deduplicated Telegram groups</strong>{" "}
+              integrated under the <code className="text-sky-300 font-mono">🌐 All GC</code> inline
+              keyboard menu and categorized across Earning, Promotion, Chatting, Escrow, and
+              Gaming/Tech. Configured strictly for pure Cloudflare Worker Module deployment (
+              <code className="text-emerald-400 font-mono">compatibility_date = "2026-11-04"</code>).
             </p>
           </div>
 
@@ -1551,7 +1559,7 @@ export default function App() {
               }`}
             >
               <Database className="w-3.5 h-3.5" />
-              KV Inspector
+              All GC & KV Store ({approvedGcs.length})
             </button>
             <button
               onClick={() => setActiveTab("deploy")}
@@ -1690,19 +1698,24 @@ export default function App() {
             <div className="lg:col-span-5 space-y-6">
               <div className="border border-slate-800 bg-slate-900/60 rounded-xl p-5 space-y-4">
                 <h2 className="text-base font-semibold text-white font-display">
-                  01. Test Scenarios & Persona Switcher
+                  01. Test Scenarios & All GC Quick Triggers
                 </h2>
                 <p className="text-xs text-slate-400 leading-relaxed">
-                  Switch between the Bot Owner (<code className="text-sky-300">8838351233</code>) and a
-                  Standard User (<code className="text-sky-300">551920411</code>) to test role-gated
-                  admin actions, the 4-step <code className="text-sky-300">/start</code> loading
-                  sequence, and the 3-referral unlock gate.
+                  Click <strong className="text-white">🌐 Open All GC ({approvedGcs.length})</strong>{" "}
+                  below or inside the Telegram bot menu to test the paginated inline keyboard containing
+                  all 29 deduplicated Telegram group links.
                 </p>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   <button
+                    onClick={() => handleCallbackClick("menu:all_gcs:0")}
+                    className="px-3.5 py-2.5 text-xs font-medium bg-sky-500/20 hover:bg-sky-500/30 text-sky-200 border border-sky-500/40 rounded-lg text-left transition-colors cursor-pointer"
+                  >
+                    🌐 Open All GC ({approvedGcs.length} Links)
+                  </button>
+                  <button
                     onClick={() => triggerStartAnimation(activeUserId)}
-                    className="px-3.5 py-2.5 text-xs font-medium bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border border-sky-500/30 rounded-lg text-left transition-colors cursor-pointer"
+                    className="px-3.5 py-2.5 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-left transition-colors cursor-pointer"
                   >
                     ⚡ Run 4-Step /start Animation
                   </button>
@@ -1720,12 +1733,6 @@ export default function App() {
                     className="px-3.5 py-2.5 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-left transition-colors cursor-pointer"
                   >
                     🛡️ Open Admin Panel (8838351233)
-                  </button>
-                  <button
-                    onClick={() => handleCallbackClick("admin:pending:0")}
-                    className="px-3.5 py-2.5 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-left transition-colors cursor-pointer"
-                  >
-                    📥 Review Pending Submissions ({pendingGcs.length})
                   </button>
                 </div>
               </div>
@@ -1750,15 +1757,9 @@ export default function App() {
                     </span>
                   </div>
                   <div className="py-2 flex items-center justify-between">
-                    <span className="text-slate-400">Maintenance Mode</span>
-                    <span className="font-mono text-slate-200">
-                      {config.maintenanceMode ? "🔴 ENABLED" : "🟢 DISABLED"}
-                    </span>
-                  </div>
-                  <div className="py-2 flex items-center justify-between">
-                    <span className="text-slate-400">Approved / Pending GCs</span>
+                    <span className="text-slate-400">Deduplicated All GC Count</span>
                     <span className="font-mono text-slate-200 tabular-nums">
-                      {approvedGcs.length} Approved · {pendingGcs.length} Pending
+                      {approvedGcs.length} Verified GCs
                     </span>
                   </div>
                 </div>
@@ -1781,12 +1782,12 @@ export default function App() {
                 </div>
               </div>
               <div className="border border-slate-800 bg-slate-900/50 rounded-xl p-4">
-                <div className="text-xs text-slate-400">Approved GCs (gcs:approved)</div>
+                <div className="text-xs text-slate-400">All GC Directory (gcs:approved)</div>
                 <div className="text-lg font-bold text-emerald-400 font-mono tabular-nums mt-1">
-                  {approvedGcs.length} Verified
+                  {approvedGcs.length} Verified Links
                 </div>
                 <div className="text-xs text-slate-400 mt-1">
-                  {approvedGcs.filter((g) => g.isSponsored).length} Sponsored VIP listings
+                  0 Duplicates · Auto-normalized URLs
                 </div>
               </div>
               <div className="border border-slate-800 bg-slate-900/50 rounded-xl p-4">
@@ -1802,6 +1803,90 @@ export default function App() {
                   {forceChannels.length} Active Gates
                 </div>
                 <div className="text-xs text-slate-400 mt-1">Checked via getChatMember API</div>
+              </div>
+            </div>
+
+            {/* KV Approved & Pending GCs Table (All 29 GCs) */}
+            <div className="border border-slate-800 bg-slate-900/50 rounded-xl overflow-hidden">
+              <div className="px-5 py-4 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h2 className="text-base font-semibold text-white font-display">
+                    All GC Master Directory (<code className="text-sky-300 font-mono">gcs:approved</code> —{" "}
+                    {approvedGcs.length} Unique Groups)
+                  </h2>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Every link is automatically parsed, categorized, and deduplicated via{" "}
+                    <code className="text-slate-300 font-mono">normalizeTelegramLink()</code>.
+                  </p>
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-800 text-slate-400 bg-slate-950/60">
+                      <th className="py-3 px-4 font-medium">#</th>
+                      <th className="py-3 px-4 font-medium">GC ID</th>
+                      <th className="py-3 px-4 font-medium">Group Title</th>
+                      <th className="py-3 px-4 font-medium">Category</th>
+                      <th className="py-3 px-4 font-medium">Telegram Link</th>
+                      <th className="py-3 px-4 font-medium">Status</th>
+                      <th className="py-3 px-4 font-medium text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/70">
+                    {[...pendingGcs, ...approvedGcs].map((gc, idx) => (
+                      <tr key={gc.id} className="hover:bg-slate-800/30">
+                        <td className="py-3 px-4 font-mono tabular-nums text-slate-500">{idx + 1}</td>
+                        <td className="py-3 px-4 font-mono text-slate-300">{gc.id}</td>
+                        <td className="py-3 px-4 font-medium text-white">
+                          {gc.title} {gc.isSponsored ? "🌟" : ""}
+                        </td>
+                        <td className="py-3 px-4 text-slate-300">{gc.category}</td>
+                        <td className="py-3 px-4 font-mono text-sky-300">
+                          <a
+                            href={gc.link}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="hover:underline inline-flex items-center gap-1"
+                          >
+                            {gc.link}
+                            <ExternalLink className="w-3 h-3" />
+                          </a>
+                        </td>
+                        <td className="py-3 px-4">
+                          {gc.status === "approved" ? (
+                            <span className="text-emerald-400 font-medium">Approved</span>
+                          ) : (
+                            <span className="text-amber-400 font-medium">Pending Queue</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          {gc.status === "pending" ? (
+                            <button
+                              onClick={() => {
+                                setActiveUserId(ADMIN_ID);
+                                handleCallbackClick(`admin:approve:${gc.id}`);
+                              }}
+                              className="px-2.5 py-1 text-xs font-medium bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 rounded transition-colors cursor-pointer"
+                            >
+                              Approve Now
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() =>
+                                setApprovedGcs((prev) => prev.filter((item) => item.id !== gc.id))
+                              }
+                              className="px-2.5 py-1 text-xs font-medium bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 rounded transition-colors cursor-pointer inline-flex items-center gap-1"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                              Remove
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
 
@@ -1860,74 +1945,6 @@ export default function App() {
                         </tr>
                       );
                     })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* KV Approved & Pending GCs Table */}
-            <div className="border border-slate-800 bg-slate-900/50 rounded-xl overflow-hidden">
-              <div className="px-5 py-4 border-b border-slate-800">
-                <h2 className="text-base font-semibold text-white font-display">
-                  KV Keys: <code className="text-sky-300 font-mono">gcs:approved</code> &{" "}
-                  <code className="text-amber-300 font-mono">gcs:pending</code>
-                </h2>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead>
-                    <tr className="border-b border-slate-800 text-slate-400 bg-slate-950/60">
-                      <th className="py-3 px-4 font-medium">GC ID</th>
-                      <th className="py-3 px-4 font-medium">Group Title</th>
-                      <th className="py-3 px-4 font-medium">Category</th>
-                      <th className="py-3 px-4 font-medium">Submitted By</th>
-                      <th className="py-3 px-4 font-medium">Status</th>
-                      <th className="py-3 px-4 font-medium text-right">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800/70">
-                    {[...pendingGcs, ...approvedGcs].map((gc) => (
-                      <tr key={gc.id} className="hover:bg-slate-800/30">
-                        <td className="py-3 px-4 font-mono text-slate-300">{gc.id}</td>
-                        <td className="py-3 px-4 font-medium text-white">
-                          {gc.title} {gc.isSponsored ? "🌟" : ""}
-                        </td>
-                        <td className="py-3 px-4 text-slate-300">{gc.category}</td>
-                        <td className="py-3 px-4 font-mono text-slate-400">
-                          {gc.submitterUsername} ({gc.submittedBy})
-                        </td>
-                        <td className="py-3 px-4">
-                          {gc.status === "approved" ? (
-                            <span className="text-emerald-400 font-medium">Approved</span>
-                          ) : (
-                            <span className="text-amber-400 font-medium">Pending Queue</span>
-                          )}
-                        </td>
-                        <td className="py-3 px-4 text-right">
-                          {gc.status === "pending" ? (
-                            <button
-                              onClick={() => {
-                                setActiveUserId(ADMIN_ID);
-                                handleCallbackClick(`admin:approve:${gc.id}`);
-                              }}
-                              className="px-2.5 py-1 text-xs font-medium bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 rounded transition-colors cursor-pointer"
-                            >
-                              Approve Now
-                            </button>
-                          ) : (
-                            <button
-                              onClick={() =>
-                                setApprovedGcs((prev) => prev.filter((item) => item.id !== gc.id))
-                              }
-                              className="px-2.5 py-1 text-xs font-medium bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 rounded transition-colors cursor-pointer inline-flex items-center gap-1"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                              Remove
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
                   </tbody>
                 </table>
               </div>
@@ -2148,13 +2165,19 @@ function SimulatorPanel({
           className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-sky-300 rounded font-mono flex items-center gap-1 cursor-pointer whitespace-nowrap shrink-0"
         >
           <RefreshCw className={`w-3 h-3 ${isAnimatingStart ? "animate-spin" : ""}`} />
-          Send /start (4-Step Load)
+          Send /start
+        </button>
+        <button
+          onClick={() => handleCallbackClick("menu:all_gcs:0")}
+          className="px-2.5 py-1 bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border border-sky-500/30 rounded font-mono flex items-center gap-1 cursor-pointer whitespace-nowrap shrink-0"
+        >
+          🌐 View All GC (29)
         </button>
         <button
           onClick={simulateReferralJoin}
           className="px-2.5 py-1 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 rounded font-mono flex items-center gap-1 cursor-pointer whitespace-nowrap shrink-0"
         >
-          +1 Simulate Referral
+          +1 Referral
         </button>
       </div>
 
@@ -2210,36 +2233,45 @@ function SimulatorPanel({
             {/* Inline Keyboard Buttons */}
             {msg.keyboard && msg.keyboard.length > 0 && (
               <div className="w-full max-w-[92%] mt-1.5 space-y-1">
-                {msg.keyboard.map((row, rIdx) => (
-                  <div key={rIdx} className="grid grid-cols-2 gap-1">
-                    {row.map((btn, bIdx) => {
-                      const spanFull = row.length === 1 ? "col-span-2" : "col-span-1";
-                      if (btn.url) {
+                {msg.keyboard.map((row, rIdx) => {
+                  const gridCols =
+                    row.length === 1
+                      ? "grid-cols-1"
+                      : row.length === 3
+                      ? "grid-cols-3"
+                      : "grid-cols-2";
+                  return (
+                    <div key={rIdx} className={`grid ${gridCols} gap-1`}>
+                      {row.map((btn, bIdx) => {
+                        if (btn.url) {
+                          return (
+                            <a
+                              key={bIdx}
+                              href={btn.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="px-2.5 py-2 bg-slate-800/90 hover:bg-slate-700 border border-slate-700/80 text-slate-100 rounded-lg text-[11px] font-medium text-center transition-colors flex items-center justify-center gap-1 truncate"
+                            >
+                              <span className="truncate">{btn.text}</span>
+                              <ExternalLink className="w-3 h-3 text-slate-400 shrink-0" />
+                            </a>
+                          );
+                        }
                         return (
-                          <a
+                          <button
                             key={bIdx}
-                            href={btn.url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className={`${spanFull} px-2.5 py-2 bg-slate-800/90 hover:bg-slate-700 border border-slate-700/80 text-slate-100 rounded-lg text-[11px] font-medium text-center transition-colors flex items-center justify-center gap-1 truncate`}
+                            onClick={() =>
+                              btn.callbackData && handleCallbackClick(btn.callbackData)
+                            }
+                            className="px-2.5 py-2 bg-slate-800/90 hover:bg-slate-700 active:scale-[0.99] border border-slate-700/80 text-slate-100 rounded-lg text-[11px] font-medium text-center transition-all truncate cursor-pointer"
                           >
-                            <span className="truncate">{btn.text}</span>
-                            <ExternalLink className="w-3 h-3 text-slate-400 shrink-0" />
-                          </a>
+                            {btn.text}
+                          </button>
                         );
-                      }
-                      return (
-                        <button
-                          key={bIdx}
-                          onClick={() => btn.callbackData && handleCallbackClick(btn.callbackData)}
-                          className={`${spanFull} px-2.5 py-2 bg-slate-800/90 hover:bg-slate-700 active:scale-[0.99] border border-slate-700/80 text-slate-100 rounded-lg text-[11px] font-medium text-center transition-all truncate cursor-pointer`}
-                        >
-                          {btn.text}
-                        </button>
-                      );
-                    })}
-                  </div>
-                ))}
+                      })}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -2258,7 +2290,7 @@ function SimulatorPanel({
           onChange={(e) => setChatInput(e.target.value)}
           placeholder={
             currentUser.step === "IDLE"
-              ? "Type /start, /admin, or click a menu button..."
+              ? "Type /start, /admin, or click 🌐 All GC..."
               : `Awaiting input for ${currentUser.step}...`
           }
           className="flex-1 bg-slate-950 border border-slate-800 focus:border-sky-400 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none"

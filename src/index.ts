@@ -121,7 +121,247 @@ const DEFAULT_CONFIG: BotConfig = {
 };
 
 // ----------------------------------------------------------------------------
-// 2. CLOUDFLARE KV DATABASE HELPERS
+// 2. BULK GC DIRECTORY SEED & AUTOMATIC DUPLICATE DETECTION ENGINE
+// ----------------------------------------------------------------------------
+
+interface RawBulkGcEntry {
+  link: string;
+  title: string;
+  category: string;
+  note: string;
+  isSponsored?: boolean;
+}
+
+export const RAW_BULK_GC_ENTRIES: RawBulkGcEntry[] = [
+  {
+    link: "https://t.me/LootVerseEarn",
+    title: "LootVerse Earn",
+    category: "Earning Discussion",
+    note: "Verified daily loots, instant earning deals & cashback discussions.",
+    isSponsored: true,
+  },
+  {
+    link: "https://t.me/MMAGROUP0",
+    title: "MMA Group 0",
+    category: "Chatting & Friends",
+    note: "Active community group for general discussions, events & networking.",
+  },
+  {
+    link: "https://t.me/LagendsEarners",
+    title: "Lagends Earners",
+    category: "Earning Discussion",
+    note: "Top earning tricks, verified app referrals & daily loot alerts.",
+    isSponsored: true,
+  },
+  {
+    link: "https://t.me/+gr6YNR0RGaZkMDk1",
+    title: "VIP Exclusive Earners GC",
+    category: "Earning Discussion",
+    note: "Private invite-only group for verified earning campaigns & drops.",
+    isSponsored: true,
+  },
+  {
+    link: "https://t.me/NeoXChatsGrupJoinNow",
+    title: "NeoX Chats Group",
+    category: "Chatting & Friends",
+    note: "24/7 active chatting community — make new friends and chill.",
+  },
+  {
+    link: "https://t.me/unlimitedbaatkaro",
+    title: "Unlimited Baat Karo",
+    category: "Chatting & Friends",
+    note: "Non-stop friendly conversations, voice chats & community fun.",
+  },
+  {
+    link: "https://t.me/ChattingZone7",
+    title: "Chatting Zone 7",
+    category: "Chatting & Friends",
+    note: "Friendly global & Indian chatting zone with active moderation.",
+  },
+  {
+    link: "https://t.me/BotzBySmartyGc",
+    title: "Botz By Smarty GC",
+    category: "Gaming / Tech",
+    note: "Telegram bots, tech tools, scripts & developer support community.",
+  },
+  {
+    link: "https://t.me/indiangroup16",
+    title: "Indian Group 16",
+    category: "Chatting & Friends",
+    note: " Desi friends hangout, daily banter & active group members.",
+  },
+  {
+    link: "https://t.me/OfferDiscussion",
+    title: "Offer Discussion",
+    category: "Earning Discussion",
+    note: "Discuss live shopping offers, promo codes & instant cashback deals.",
+  },
+  {
+    link: "https://t.me/fileworkearnmoney086",
+    title: "File Work Earn Money 086",
+    category: "Earning Discussion",
+    note: "Daily file tasks, micro-jobs & verified payout earning updates.",
+  },
+  {
+    link: "https://t.me/guri_official_gc",
+    title: "Guri Official GC",
+    category: "Chatting & Friends",
+    note: "Official community chat for Guri updates, networking & support.",
+  },
+  {
+    link: "https://t.me/yadavworks",
+    title: "Yadav Works",
+    category: "Earning Discussion",
+    note: "Verified online work opportunities, campaigns & daily task updates.",
+  },
+  {
+    link: "https://t.me/marketandworks",
+    title: "Market And Works",
+    category: "Escrow GC",
+    note: "Digital marketplace for verified buyers, sellers & online works.",
+  },
+  {
+    link: "https://t.me/auraescow",
+    title: "Aura Escrow GC",
+    category: "Escrow GC",
+    note: "Trusted P2P escrow desk & safe middleman deal discussions.",
+    isSponsored: true,
+  },
+  {
+    link: "https://t.me/VP_DEAL_CHATTIN_09",
+    title: "VP Deal & Chatting 09",
+    category: "Escrow GC",
+    note: "Active deal room and trader chatting hub for verified members.",
+  },
+  {
+    link: "https://t.me/heavenpopmarket",
+    title: "Heaven Pop Market",
+    category: "Escrow GC",
+    note: "Community digital market for verified trading and deals.",
+  },
+  {
+    link: "https://t.me/ONLY_PROMO_ZONE96",
+    title: "Only Promo Zone 96",
+    category: "Promotion Zone",
+    note: "Promote your Telegram groups, channels & social links freely.",
+  },
+  {
+    link: "https://t.me/ff_free_or_paid_tournament",
+    title: "FF Free Or Paid Tournament",
+    category: "Gaming / Tech",
+    note: "Daily Free Fire custom rooms, esports tournaments & prize pools.",
+  },
+  {
+    link: "https://t.me/ecash_Earning_app",
+    title: "eCash Earning App",
+    category: "Earning Discussion",
+    note: "Official eCash app earning discussions, payment proofs & updates.",
+  },
+  {
+    link: "https://t.me/editingkingzyt",
+    title: "Editing Kingz YT",
+    category: "Gaming / Tech",
+    note: "Video editing presets, GFX/VFX assets & creator community.",
+  },
+  {
+    link: "https://t.me/royalloots75",
+    title: "Royal Loots 75",
+    category: "Earning Discussion",
+    note: "Royal loot deals, camp campaigns & instant Paytm/UPI earning.",
+  },
+  {
+    link: "https://t.me/aj_earner",
+    title: "AJ Earner",
+    category: "Earning Discussion",
+    note: "Daily verified earning apps, crypto loots & referral campaigns.",
+  },
+  {
+    link: "https://t.me/XQBUI",
+    title: "XQBUI Tech & Community",
+    category: "Gaming / Tech",
+    note: "Tech enthusiasts, UI/UX resources & digital community hub.",
+  },
+  {
+    link: "https://t.me/ONLY_PROMO_ZONE",
+    title: "Only Promo Zone",
+    category: "Promotion Zone",
+    note: "24/7 open promotion zone to grow your Telegram groups & channels.",
+    isSponsored: true,
+  },
+  {
+    link: "https://t.me/LOOTERASQUADCHAT",
+    title: "Lootera Squad Chat",
+    category: "Earning Discussion",
+    note: "Lootera Squad official chat for fastest loot alerts & discussions.",
+  },
+  {
+    link: "https://t.me/giveawaybysatym1chat",
+    title: "Giveaway By Satym Chat",
+    category: "Earning Discussion",
+    note: "Daily community giveaways, reward drops & active member chat.",
+  },
+  {
+    link: "https://t.me/unofficialbmwpay",
+    title: "Unofficial BMW Pay",
+    category: "Escrow GC",
+    note: "Payment discussion, P2P updates & trader community chat.",
+  },
+  {
+    link: "https://t.me/OTP_PANEL_CHAT",
+    title: "OTP Panel Chat",
+    category: "Escrow GC",
+    note: "Verification services, OTP panel discussion & reseller chat.",
+  },
+];
+
+/**
+ * Normalizes a Telegram link for strict duplicate detection.
+ * Preserves case for private invite hashes (+hash), lowercases public usernames.
+ */
+export function normalizeTelegramLink(rawUrl: string): string {
+  const trimmed = rawUrl.trim().replace(/\/+$/, "");
+  const match = trimmed.match(/^https?:\/\/(?:www\.)?(?:t\.me|telegram\.me)\/(.+)$/i);
+  if (!match) return trimmed.toLowerCase();
+  const path = match[1].split("?")[0].replace(/\/+$/, "");
+  if (path.startsWith("+") || path.toLowerCase().startsWith("joinchat/")) {
+    return `https://t.me/${path}`;
+  }
+  return `https://t.me/${path.toLowerCase()}`;
+}
+
+/**
+ * Deduplicates an array of GroupChatItem objects by normalized Telegram link.
+ */
+export function deduplicateGcsByLink(list: GroupChatItem[]): GroupChatItem[] {
+  const seen = new Set<string>();
+  const unique: GroupChatItem[] = [];
+  for (const item of list) {
+    const key = normalizeTelegramLink(item.link);
+    if (!seen.has(key)) {
+      seen.add(key);
+      unique.push(item);
+    }
+  }
+  return unique;
+}
+
+export const SEEDED_BULK_GCS: GroupChatItem[] = deduplicateGcsByLink(
+  RAW_BULK_GC_ENTRIES.map((entry, idx) => ({
+    id: `GC-BULK-${String(idx + 1).padStart(2, "0")}`,
+    title: entry.title,
+    category: entry.category,
+    link: entry.link.trim(),
+    note: entry.note,
+    submittedBy: ADMIN_ID,
+    submitterUsername: OWNER_USERNAME,
+    status: "approved",
+    isSponsored: Boolean(entry.isSponsored),
+    createdAt: "2026-11-05",
+  }))
+);
+
+// ----------------------------------------------------------------------------
+// 3. CLOUDFLARE KV DATABASE HELPERS
 // ----------------------------------------------------------------------------
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -214,8 +454,20 @@ async function saveUser(kv: KVNamespace, user: UserProfile): Promise<void> {
   await setKvJson(kv, `user:${user.id}`, user);
 }
 
+/**
+ * Loads approved GCs from KV and automatically merges/deduplicates the 29 bulk GCs
+ * so that all provided groups are guaranteed to be present without duplicates.
+ */
 async function getApprovedGcs(kv: KVNamespace): Promise<GroupChatItem[]> {
-  return getKvJson<GroupChatItem[]>(kv, "gcs:approved", []);
+  const stored = await getKvJson<GroupChatItem[]>(kv, "gcs:approved", []);
+  const deletedIds = await getKvJson<string[]>(kv, "gcs:deleted_ids", []);
+  const activeSeed = SEEDED_BULK_GCS.filter((g) => !deletedIds.includes(g.id));
+  const merged = deduplicateGcsByLink([...stored, ...activeSeed]);
+
+  if (merged.length !== stored.length) {
+    await setKvJson(kv, "gcs:approved", merged);
+  }
+  return merged;
 }
 
 async function getPendingGcs(kv: KVNamespace): Promise<GroupChatItem[]> {
@@ -223,11 +475,17 @@ async function getPendingGcs(kv: KVNamespace): Promise<GroupChatItem[]> {
 }
 
 // ----------------------------------------------------------------------------
-// 3. KEYBOARD BUILDERS (USER MENU & ADMIN PANEL)
+// 4. KEYBOARD BUILDERS (USER MENU, ALL GC VIEW & ADMIN PANEL)
 // ----------------------------------------------------------------------------
 
-function buildUserMainMenu(userId: number, isUnlocked: boolean): InlineKeyboard {
+function buildUserMainMenu(
+  userId: number,
+  isUnlocked: boolean,
+  totalGcsCount: number
+): InlineKeyboard {
   const kb = new InlineKeyboard()
+    .text(`🌐 All GC (${totalGcsCount})`, "menu:all_gcs:0")
+    .row()
     .text("📂 Browse Categories", "menu:categories")
     .text(
       isUnlocked ? "🌟 Sponsored / Top GCs" : "🌟 Sponsored / Top GCs 🔒",
@@ -285,7 +543,7 @@ function buildBackToAdminKeyboard(): InlineKeyboard {
 }
 
 // ----------------------------------------------------------------------------
-// 4. FORCE SUBSCRIPTION VERIFICATION
+// 5. FORCE SUBSCRIPTION VERIFICATION
 // ----------------------------------------------------------------------------
 
 async function checkForceSubscription(
@@ -314,7 +572,7 @@ async function checkForceSubscription(
 }
 
 // ----------------------------------------------------------------------------
-// 5. DASHBOARD TEXT FORMATTER
+// 6. DASHBOARD TEXT FORMATTER
 // ----------------------------------------------------------------------------
 
 function formatWelcomeCaption(
@@ -336,7 +594,7 @@ function formatWelcomeCaption(
     `📢 <b>Sponsored:</b> ${escapeHtml(config.sponsoredBannerText)}\n` +
     `━━━━━━━━━━━━━━━━━━━━━━\n` +
     `👨‍💻 <b>Developer:</b> ${OWNER_USERNAME}\n` +
-    `👇 <i>Choose an option from the interactive menu below:</i>`
+    `👇 <i>Tap "🌐 All GC" or choose a category below:</i>`
   );
 }
 
@@ -349,7 +607,7 @@ function escapeHtml(str: string): string {
 }
 
 // ----------------------------------------------------------------------------
-// 6. MAIN CLOUDFLARE WORKER MODULE ENTRYPOINT (has_modules: true)
+// 7. MAIN CLOUDFLARE WORKER MODULE ENTRYPOINT (has_modules: true)
 // ----------------------------------------------------------------------------
 
 export default {
@@ -385,6 +643,7 @@ export default {
           owner: OWNER_USERNAME,
           adminId: ADMIN_ID,
           workerModule: true,
+          totalSeededGcs: SEEDED_BULK_GCS.length,
           kvBound: Boolean(env.BOT_KV),
           tokenConfigured: Boolean(env.BOT_TOKEN),
           status: "Cloudflare Worker Module Active",
@@ -547,7 +806,7 @@ export default {
       const approvedGcs = await getApprovedGcs(kv);
       const isUnlocked = user.referrals.length >= config.requiredReferrals;
       const caption = formatWelcomeCaption(user, config, approvedGcs.length);
-      const menuKb = buildUserMainMenu(user.id, isUnlocked);
+      const menuKb = buildUserMainMenu(user.id, isUnlocked, approvedGcs.length);
 
       // Step 4: Final Welcome Banner Photo or Rich Dashboard Message
       if (env.WELCOME_BANNER_URL) {
@@ -598,7 +857,7 @@ export default {
     });
 
     // ------------------------------------------------------------------------
-    // CALLBACK QUERIES: USER MENU & NAVIGATION
+    // CALLBACK QUERIES: USER MENU, ALL GC DIRECTORY & NAVIGATION
     // ------------------------------------------------------------------------
     bot.on("callback_query:data", async (c) => {
       const data = c.callbackQuery.data;
@@ -642,7 +901,7 @@ export default {
         await c.answerCallbackQuery({ text: "✅ Verified! Welcome to Group Finder Pro." });
         await renderScreen(
           formatWelcomeCaption(user, config, approvedGcs.length),
-          buildUserMainMenu(user.id, isUnlocked)
+          buildUserMainMenu(user.id, isUnlocked, approvedGcs.length)
         );
         return;
       }
@@ -655,15 +914,58 @@ export default {
         await c.answerCallbackQuery();
         await renderScreen(
           formatWelcomeCaption(user, config, approvedGcs.length),
-          buildUserMainMenu(user.id, isUnlocked)
+          buildUserMainMenu(user.id, isUnlocked, approvedGcs.length)
         );
         return;
       }
 
-      // 3. Browse Categories
+      // 2B. "All GC" Complete Deduplicated Directory (Paginated Inline Keyboard)
+      if (data.startsWith("menu:all_gcs:")) {
+        const page = parseInt(data.split(":")[2], 10) || 0;
+        const pageSize = 10;
+        const totalPages = Math.max(1, Math.ceil(approvedGcs.length / pageSize));
+        const safePage = Math.min(Math.max(0, page), totalPages - 1);
+        const slice = approvedGcs.slice(safePage * pageSize, (safePage + 1) * pageSize);
+
+        const kb = new InlineKeyboard();
+        let text =
+          `🌐 <b>All Verified Group Chats (${approvedGcs.length} Total)</b>\n` +
+          `━━━━━━━━━━━━━━━━━━━━━━\n` +
+          `📄 <i>Showing Page ${safePage + 1} of ${totalPages} (Deduplicated & Verified):</i>\n\n`;
+
+        slice.forEach((gc, idx) => {
+          const num = safePage * pageSize + idx + 1;
+          text +=
+            `<b>${num}. ${escapeHtml(gc.title)}</b> ${gc.isSponsored ? "🌟" : ""}\n` +
+            `├ 📂 <i>${escapeHtml(gc.category)}</i>\n` +
+            `└ 🔗 <a href="${escapeHtml(gc.link)}">${escapeHtml(gc.link)}</a>\n\n`;
+
+          kb.url(`🚀 ${num}. ${gc.title}`, gc.link);
+          if (idx % 2 === 1) kb.row();
+        });
+        if (slice.length % 2 === 1) kb.row();
+
+        if (totalPages > 1) {
+          if (safePage > 0) kb.text("⬅️ Prev", `menu:all_gcs:${safePage - 1}`);
+          kb.text(`📄 ${safePage + 1}/${totalPages}`, "noop");
+          if (safePage + 1 < totalPages) kb.text("Next ➡️", `menu:all_gcs:${safePage + 1}`);
+          kb.row();
+        }
+
+        kb.text("📂 By Category", "menu:categories").text("🔙 Main Menu", "menu:home");
+
+        await c.answerCallbackQuery();
+        await renderScreen(text, kb);
+        return;
+      }
+
+      // 3. Browse Categories (Includes "🌐 All GC" button at the top)
       if (data === "menu:categories") {
         const categories = await getCategories(kv);
-        const kb = new InlineKeyboard();
+        const kb = new InlineKeyboard()
+          .text(`🌐 All GC (${approvedGcs.length})`, "menu:all_gcs:0")
+          .row();
+
         categories.forEach((cat, idx) => {
           const count = approvedGcs.filter((g) => g.category === cat).length;
           kb.text(`📂 ${cat} (${count})`, `cat:view:${idx}:0`);
@@ -675,7 +977,7 @@ export default {
         await renderScreen(
           `📂 <b>Browse Verified Categories</b>\n` +
             `━━━━━━━━━━━━━━━━━━━━━━\n` +
-            `Select a category below to explore active Telegram Groups & Communities:`,
+            `Tap <b>🌐 All GC (${approvedGcs.length})</b> to view the full master list or select a category below:`,
           kb
         );
         return;
@@ -690,13 +992,13 @@ export default {
         const categoryName = categories[catIdx] || "Category";
 
         const items = approvedGcs.filter((g) => g.category === categoryName);
-        const pageSize = 5;
+        const pageSize = 6;
         const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
         const slice = items.slice(page * pageSize, (page + 1) * pageSize);
 
         const kb = new InlineKeyboard();
         let text =
-          `📂 <b>Category: ${escapeHtml(categoryName)}</b>\n` +
+          `📂 <b>Category: ${escapeHtml(categoryName)} (${items.length})</b>\n` +
           `━━━━━━━━━━━━━━━━━━━━━━\n`;
 
         if (slice.length === 0) {
@@ -721,7 +1023,10 @@ export default {
           }
         }
 
-        kb.text("🔙 Back to Categories", "menu:categories").text("🏠 Home", "menu:home");
+        kb.text("🌐 All GC", "menu:all_gcs:0")
+          .text("🔙 Categories", "menu:categories")
+          .row()
+          .text("🏠 Back to Main Menu", "menu:home");
         await c.answerCallbackQuery();
         await renderScreen(text, kb);
         return;
@@ -848,7 +1153,7 @@ export default {
         if (myApproved.length === 0 && myPending.length === 0) {
           text += `<i>You haven't submitted any Group Chats yet. Tap "➕ Submit New GC" to list your community!</i>`;
         } else {
-          myApproved.forEach((g) => {
+          myApproved.slice(0, 10).forEach((g) => {
             text += `🟢 <b>${escapeHtml(g.title)}</b> (${escapeHtml(g.category)})\n└ 🔗 ${escapeHtml(g.link)}\n\n`;
           });
           myPending.forEach((g) => {
@@ -901,7 +1206,7 @@ export default {
         await renderScreen(
           `🔍 <b>Quick Search Directory</b>\n` +
             `━━━━━━━━━━━━━━━━━━━━━━\n` +
-            `Send any keyword, topic, or category name to search across all verified Group Chats:`,
+            `Send any keyword, topic, or category name to search across all ${approvedGcs.length} verified Group Chats:`,
           buildBackToMainKeyboard()
         );
         return;
@@ -924,17 +1229,18 @@ export default {
       // 11. How It Works
       if (data === "menu:how_it_works") {
         const kb = new InlineKeyboard()
-          .text("📂 Explore Categories", "menu:categories")
-          .text("➕ Submit GC", "menu:submit_gc")
+          .text(`🌐 All GC (${approvedGcs.length})`, "menu:all_gcs:0")
+          .text("📂 Categories", "menu:categories")
           .row()
-          .text("🔙 Back to Main Menu", "menu:home");
+          .text("➕ Submit GC", "menu:submit_gc")
+          .text("🔙 Main Menu", "menu:home");
 
         await c.answerCallbackQuery();
         await renderScreen(
           `❓ <b>How ${BOT_NAME} Works</b>\n` +
             `━━━━━━━━━━━━━━━━━━━━━━\n` +
-            `1️⃣ <b>Browse Categories:</b> Explore curated Telegram groups across Earning, Promotion, Chatting, Escrow, and Gaming/Tech.\n\n` +
-            `2️⃣ <b>Submit Your GC:</b> List your own Telegram group with a custom note. Every submission is verified by our Admin team to prevent spam.\n\n` +
+            `1️⃣ <b>All GC & Categories:</b> Browse all ${approvedGcs.length} verified Telegram groups under <b>🌐 All GC</b> or filter by Earning, Promotion, Chatting, Escrow, and Gaming/Tech.\n\n` +
+            `2️⃣ <b>Submit Your GC:</b> List your own Telegram group with automatic duplicate-link detection. Every submission is verified by our Admin team.\n\n` +
             `3️⃣ <b>Refer & Unlock:</b> Invite <b>${config.requiredReferrals} friends</b> using your unique referral link to unlock <b>🌟 Sponsored / Top GCs</b> and increase your submission limit from ${config.baseGcLimit} to ${config.unlockedGcLimit} GCs!\n\n` +
             `👨‍💻 <b>Owner & Support:</b> ${OWNER_USERNAME}`,
           kb
@@ -1065,8 +1371,8 @@ export default {
             text += `\n`;
           }
 
-          text += `📂 <b>Recent Approved GCs (${approvedGcs.length}):</b>\n`;
-          approvedGcs.slice(0, 6).forEach((gc) => {
+          text += `📂 <b>Recent Approved GCs (${approvedGcs.length} total):</b>\n`;
+          approvedGcs.slice(0, 8).forEach((gc) => {
             text += `• <b>${escapeHtml(gc.title)}</b> [<code>${gc.id}</code>]\n`;
             kb.text(`🗑️ Delete GC: ${gc.title}`, `admin:del_gc:${gc.id}`).row();
           });
@@ -1089,6 +1395,11 @@ export default {
 
         if (data.startsWith("admin:del_gc:")) {
           const gcId = data.split(":")[2];
+          const deletedIds = await getKvJson<string[]>(kv, "gcs:deleted_ids", []);
+          if (!deletedIds.includes(gcId)) {
+            deletedIds.push(gcId);
+            await setKvJson(kv, "gcs:deleted_ids", deletedIds);
+          }
           const updated = approvedGcs.filter((g) => g.id !== gcId);
           await setKvJson(kv, "gcs:approved", updated);
           await c.answerCallbackQuery({ text: "🗑️ GC deleted from directory!" });
@@ -1148,10 +1459,10 @@ export default {
           const [item] = pending.splice(idx, 1);
           item.status = "approved";
           item.isSponsored = isSponsored;
-          approvedGcs.unshift(item);
+          const dedupedApproved = deduplicateGcsByLink([item, ...approvedGcs]);
 
           await setKvJson(kv, "gcs:pending", pending);
-          await setKvJson(kv, "gcs:approved", approvedGcs);
+          await setKvJson(kv, "gcs:approved", dedupedApproved);
 
           // Notify submitter
           try {
@@ -1320,13 +1631,13 @@ export default {
         const isUnlocked = user.referrals.length >= config.requiredReferrals;
         await c.reply(formatWelcomeCaption(user, config, approvedGcs.length), {
           parse_mode: "HTML",
-          reply_markup: buildUserMainMenu(user.id, isUnlocked),
+          reply_markup: buildUserMainMenu(user.id, isUnlocked, approvedGcs.length),
           link_preview_options: { is_disabled: true },
         });
         return;
       }
 
-      // 1. GC Submission Flow: Title -> Link -> Note
+      // 1. GC Submission Flow: Title -> Link (with Duplicate Detection) -> Note
       if (user.step === "SUBMIT_GC_TITLE") {
         if (text.length < 3 || text.length > 60) {
           await c.reply("⚠️ Please enter a valid Group Title between 3 and 60 characters.");
@@ -1349,11 +1660,28 @@ export default {
           );
           return;
         }
+
+        // Duplicate Check against Approved & Pending GCs
+        const normalizedCandidate = normalizeTelegramLink(text);
+        const approvedGcs = await getApprovedGcs(kv);
+        const pendingGcs = await getPendingGcs(kv);
+        const isDuplicate = [...approvedGcs, ...pendingGcs].some(
+          (g) => normalizeTelegramLink(g.link) === normalizedCandidate
+        );
+
+        if (isDuplicate) {
+          await c.reply(
+            "⚠️ <b>Duplicate Group Detected!</b>\nThis Telegram group link is already listed in our directory or awaiting review. Please send a different group link:",
+            { parse_mode: "HTML", reply_markup: buildBackToMainKeyboard() }
+          );
+          return;
+        }
+
         user.draft.link = text;
         user.step = "SUBMIT_GC_NOTE";
         await saveUser(kv, user);
         await c.reply(
-          `🔗 <b>Link Saved!</b>\n\n<b>Step 3b of 3:</b> Finally, send a short <b>Note / Description</b> (max 140 chars) describing your group:`,
+          `🔗 <b>Link Verified (No Duplicates)!</b>\n\n<b>Step 3b of 3:</b> Finally, send a short <b>Note / Description</b> (max 140 chars) describing your group:`,
           { parse_mode: "HTML", reply_markup: buildBackToMainKeyboard() }
         );
         return;
@@ -1420,21 +1748,22 @@ export default {
           (g) =>
             g.title.toLowerCase().includes(q) ||
             g.category.toLowerCase().includes(q) ||
-            g.note.toLowerCase().includes(q)
+            g.note.toLowerCase().includes(q) ||
+            g.link.toLowerCase().includes(q)
         );
 
         const kb = new InlineKeyboard();
         let replyText = `🔍 <b>Search Results for "${escapeHtml(text)}" (${matches.length})</b>\n━━━━━━━━━━━━━━━━━━━━━━\n`;
 
         if (matches.length === 0) {
-          replyText += `<i>No matching groups found. Try another keyword or browse categories!</i>`;
+          replyText += `<i>No matching groups found. Try another keyword or tap 🌐 All GC!</i>`;
         } else {
-          matches.slice(0, 6).forEach((g, idx) => {
+          matches.slice(0, 8).forEach((g, idx) => {
             replyText += `<b>${idx + 1}. ${escapeHtml(g.title)}</b> [${escapeHtml(g.category)}]\n└ 📝 ${escapeHtml(g.note)}\n\n`;
             kb.url(`🚀 Join ${g.title}`, g.link).row();
           });
         }
-        kb.text("🔙 Back to Main Menu", "menu:home");
+        kb.text("🌐 All GC", "menu:all_gcs:0").text("🔙 Main Menu", "menu:home");
 
         await c.reply(replyText, { parse_mode: "HTML", reply_markup: kb });
         return;
