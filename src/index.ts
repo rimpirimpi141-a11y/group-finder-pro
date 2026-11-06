@@ -3,6 +3,7 @@
  * 𝕲𝖗𝖔𝖚𝖕 𝕱𝖎𝖓𝖉𝖊𝖗 𝕻𝖗𝖔 (Group Finder Pro) — Cloudflare Worker Telegram Bot
  * ============================================================================
  * Framework : grammY (https://grammy.dev) — Webhooks on Cloudflare Workers
+ * Module    : ES Module Worker (has_modules: true) -> export default { fetch }
  * Storage   : Cloudflare Workers KV (Binding: BOT_KV)
  * Owner     : @aaditya334356
  * Admin ID  : 8838351233
@@ -12,8 +13,19 @@
 import { Bot, Context, InlineKeyboard, webhookCallback } from "grammy";
 
 // ----------------------------------------------------------------------------
-// 1. ENVIRONMENT & DATA INTERFACES
+// 1. CLOUDFLARE WORKER KV & ENVIRONMENT INTERFACES
 // ----------------------------------------------------------------------------
+
+export interface KVNamespace {
+  get(key: string): Promise<string | null>;
+  put(key: string, value: string): Promise<void>;
+  delete(key: string): Promise<void>;
+}
+
+export interface ExecutionContext {
+  waitUntil(promise: Promise<unknown>): void;
+  passThroughOnException(): void;
+}
 
 export interface Env {
   BOT_KV: KVNamespace;
@@ -337,16 +349,25 @@ function escapeHtml(str: string): string {
 }
 
 // ----------------------------------------------------------------------------
-// 6. MAIN CLOUDFLARE WORKER EXPORT & BOT LOGIC
+// 6. MAIN CLOUDFLARE WORKER MODULE ENTRYPOINT (has_modules: true)
 // ----------------------------------------------------------------------------
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, _ctx?: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
 
-    // Health check & quick webhook setter route
+    // Health check & automatic Telegram webhook registration route
     if (request.method === "GET") {
       if (url.pathname === "/setWebhook") {
+        if (!env.BOT_TOKEN) {
+          return new Response(
+            JSON.stringify({
+              ok: false,
+              error: "BOT_TOKEN secret is not configured yet. Run: npx wrangler secret put BOT_TOKEN",
+            }),
+            { status: 500, headers: { "content-type": "application/json" } }
+          );
+        }
         const webhookUrl = `${url.origin}/`;
         const res = await fetch(
           `https://api.telegram.org/bot${env.BOT_TOKEN}/setWebhook?url=${encodeURIComponent(webhookUrl)}`
@@ -357,16 +378,24 @@ export default {
           { headers: { "content-type": "application/json" } }
         );
       }
+
       return new Response(
         JSON.stringify({
           bot: BOT_NAME,
           owner: OWNER_USERNAME,
           adminId: ADMIN_ID,
-          status: "Cloudflare Worker Active",
+          workerModule: true,
+          kvBound: Boolean(env.BOT_KV),
+          tokenConfigured: Boolean(env.BOT_TOKEN),
+          status: "Cloudflare Worker Module Active",
           tip: "Visit /setWebhook to bind your Telegram Bot webhook automatically.",
         }),
         { headers: { "content-type": "application/json" } }
       );
+    }
+
+    if (!env.BOT_TOKEN) {
+      return new Response("Missing BOT_TOKEN secret", { status: 500 });
     }
 
     const bot = new Bot(env.BOT_TOKEN);
